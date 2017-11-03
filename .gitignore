@@ -1,0 +1,4 @@
+*.pyc
+auth.py
+log
+log_debug
