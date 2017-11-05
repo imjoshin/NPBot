@@ -9,7 +9,13 @@ def getJsonFromCurl(curl):
 			log("Reached timeout of %d seconds on curl. (%s)" % (constants.CURL_TIMEOUT), curl)
 			return None
 
-	return json.loads(process)
+	try:
+		ret = json.loads(process)
+	except:
+		log("Failed to decode json from curl. (%s)" % (curl))
+		return None
+
+	return ret
 
 def log(str):
 	logFile = "log" if not constants.DEBUG else "log_debug"
