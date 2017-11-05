@@ -43,7 +43,7 @@ def processGame(notification_settings):
 		return
 
 	# check if new turn
-	db.query("SELECT * FROM game_turn WHERE game_id = '%s' AND id = '%s'" % (gameId, turnData['turn_num']))
+	db.query("SELECT * FROM game_turn WHERE game_id = '%s' AND id = '%s' and id != 0" % (gameId, turnData['turn_num']))
 	rows = db.fetch()
 
 	if len(rows) is 0:
@@ -132,7 +132,7 @@ def processGame(notification_settings):
 	db.close()
 
 def sendTurn(db, turnData, notification_settings):
-	print "Sending turn..."
+	log("Posting game new turn %d. (%s, %s)" % (turnData['turn_num'], turnData['name'], notification_settings['game_id']))
 	# sort players by rank
 	players = sorted(turnData['players'], key=lambda k: k['rank'])
 	attachments = []
@@ -187,7 +187,8 @@ def sendTurn(db, turnData, notification_settings):
 		'%TURN%': turnData['turn_num'],
 		'%NAME%': turnData['name'],
 		'%TURNSTART%': starttime,
-		'%TURNEND%': endtime
+		'%TURNEND%': endtime,
+		'\\n': '\n'
 	}
 
 	# replace variables in text
@@ -209,6 +210,7 @@ def sendTurn(db, turnData, notification_settings):
 		print "Posting to discord..."
 
 def sendPlayerTurn(db, playerData, turnData, notification_settings):
+	log("Posting %s's turn %d. (%s, %s)" % (playerData['name'], turnData['turn_num'], turnData['name'], notification_settings['game_id']))
 	nickname = getNickName(db, playerData['id'], notification_settings['game_id'])
 	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
 	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
@@ -218,7 +220,8 @@ def sendPlayerTurn(db, playerData, turnData, notification_settings):
 		'%NAME%': turnData['name'],
 		'%TURNSTART%': starttime,
 		'%TURNEND%': endtime,
-		'%PLAYER%': playerData['name'] + (' (%s)' % nickname if nickname is not '' else '')
+		'%PLAYER%': playerData['name'] + (' (%s)' % nickname if nickname is not '' else ''),
+		'\\n': '\n'
 	}
 
 	# replace variables in text
@@ -239,10 +242,74 @@ def sendPlayerTurn(db, playerData, turnData, notification_settings):
 	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def sendTurnWarning(db, turnData, notification_settings):
-	print "Sending turn warning..."
+	log("Posting warning. (%s, %s)" % (turnData['name'], notification_settings['game_id']))
+	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+
+	variables = {
+		'%TURN%': turnData['turn_num'],
+		'%NAME%': turnData['name'],
+		'%TURNSTART%': starttime,
+		'%TURNEND%': endtime,
+		'\\n': '\n'
+	}
+
+	# replace variables in text
+	text = replaceArray(notification_settings['print_warning_format'], variables)
+
+	post = {
+		'username': notification_settings['webhook_name'],
+		'channel': notification_settings['webhook_channel'],
+		'icon_url': notification_settings['webhook_image'],
+		'attachments': [{
+			'color': '#FFFFFF',
+			'text': text,
+			"mrkdwn_in": ["text"]
+		}],
+	}
+
+	command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def sendPlayerWarning(db, turnData, notification_settings):
-	print "Sending player warning..."
+	log("Posting player warning. (%s, %s)" % (turnData['name'], notification_settings['game_id']))
+	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	playersLeft = getPlayersLeft(turnData['players'])
+	playersFormatted = []
+
+	for player in playersLeft:
+		nickname = getNickName(db, player['id'], notification_settings['game_id'])
+		playersFormatted.append(player['name'] + (' (%s)' % nickname if nickname is not '' else ''))
+
+	players = ', '.join(playersFormatted)
+
+	variables = {
+		'%TURN%': turnData['turn_num'],
+		'%NAME%': turnData['name'],
+		'%TURNSTART%': starttime,
+		'%TURNEND%': endtime,
+		'%COUNT%': len(playersLeft),
+		'%PLAYERS%': players,
+		'\\n': '\n'
+	}
+
+	# replace variables in text
+	text = replaceArray(notification_settings['print_last_players_format'], variables)
+
+	post = {
+		'username': notification_settings['webhook_name'],
+		'channel': notification_settings['webhook_channel'],
+		'icon_url': notification_settings['webhook_image'],
+		'attachments': [{
+			'color': playersLeft[0]['color'] if len(playersLeft) is 1 else '#FFFFFF',
+			'text': text,
+			"mrkdwn_in": ["text"]
+		}],
+	}
+
+	command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def getPlayersLeft(players):
 	left = []
