@@ -23,3 +23,9 @@ def log(str):
 	print(p)
 	with open(logFile, "a") as l:
 		l.write("%s\n" % p)
+
+def replaceArray(string, array):
+	for key in array:
+		string = string.replace(key, str(array[key]))
+
+	return string

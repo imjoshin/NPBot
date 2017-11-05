@@ -49,11 +49,10 @@ def processGame(notification_settings):
 	if len(rows) is 0:
 		log("Turn %d started! ('%s', %s)" % (turnData['turn_num'], settings['name'], settings['id']))
 		query = """
-		INSERT INTO game_turn (id, game_id, time_end, time_end, tick, productions, production_counter)
+		INSERT INTO game_turn (id, game_id, turn_start, turn_end, tick, productions, production_counter)
 		VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), %s, %s, %s)
 		""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], turnData['tick'], turnData['productions'], turnData['production_counter'])
 		db.query(query)
-		sendTurn(turnData, notification_settings)
 
 		# update players last turn who just took their turn last minute
 		if turnData['turn_num'] is not 1:
@@ -67,6 +66,8 @@ def processGame(notification_settings):
 			VALUES (%s, %s, '%s', %s, %s, '%s', %s, %s, %s, %s, %s, %s)
 			""" % (turnData['turn_num'], player['id'], gameId, player['status'], player['rank'], json.dumps(player['tech']), player['total_carriers'], player['total_economy'], player['total_industry'], player['total_science'], player['total_ships'], player['total_stars'])
 			db.query(query)
+
+		sendTurn(db, turnData, notification_settings)
 
 	for player in turnData['players']:
 		# check if new player
@@ -121,10 +122,83 @@ def processGame(notification_settings):
 
 	db.close()
 
-def sendTurn(turnData, notification_settings):
+def sendTurn(db, turnData, notification_settings):
 	print "Sending turn..."
+	# sort players by rank
+	players = sorted(turnData['players'], key=lambda k: k['rank'])
+	attachments = []
 
-def sendPlayerTurn(playerData, turnNum, notification_settings):
+	for player in players:
+		status = "BOT: " if player['status'] is not 0 else ""
+		nickname = getNickName(db, player['id'], notification_settings['game_id'])
+
+		# player is still alive
+		if player['total_stars'] is not 0:
+			rankDif = getRankDif(player['rank'], player['rank_last']) if 'rank_last' in player else ""
+			title = '%d. %s%s%s %s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '', rankDif)
+
+			# get total tech
+			tech = 0
+			for techName in player['tech']:
+				tech += int(player['tech'][techName]['level'])
+
+			variables = {
+				'%STARS%': player['total_stars'],
+				'%SHIPS%': player['total_ships'],
+				'%TECH%': tech,
+				'%ECON%': player['total_economy'],
+				'%INDUSTRY%': player['total_industry'],
+				'%SCIENCE%': player['total_science'],
+				'\\n': '\n'
+			}
+
+			# replace variables in text
+			text = replaceArray(notification_settings['print_leaderboard_format'], variables)
+
+			attachments.append({
+				'color': player['color'],
+				'title': title,
+				'text': text,
+				"mrkdwn_in": ["text"]
+			})
+		# player is dead
+		else:
+			title = '%d. %s%s%s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '')
+
+			attachments.append({
+				'color': '#999999',
+				'title': title
+			})
+
+	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+
+	variables = {
+		'%TURN%': turnData['turn_num'],
+		'%NAME%': turnData['name'],
+		'%TURNSTART%': starttime,
+		'%TURNEND%': endtime
+	}
+
+	# replace variables in text
+	text = replaceArray(notification_settings['print_turn_start_format'], variables)
+
+	if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+		post = {
+	        'username': notification_settings['webhook_name'],
+	        'channel': notification_settings['webhook_channel'],
+	        'icon_url': notification_settings['webhook_image'],
+	        'attachments': attachments,
+			'text': text
+	    }
+
+		command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+		process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+		print "Posting to discord..."
+
+def sendPlayerTurn(db, playerData, turnData, notification_settings):
 	print "Sending player..."
 
 def sendTurnWarning(turnData, notification_settings):
@@ -139,6 +213,24 @@ def getPlayersLeft(players):
 		if player['ready'] and player['status'] is 0:
 			left.append(player)
 	return left
+
+def getRankDif(thisTurn, lastTurn):
+	# determine rank change
+	if thisTurn > lastTurn:
+		return ":red-down: %d" % (thisTurn - lastTurn)
+	elif thisTurn < lastTurn:
+		return ":green-up: %d" % (lastTurn - thisTurn)
+	else:
+		return ""
+
+def getNickName(db, playerId, gameId):
+	db.query("SELECT * FROM player WHERE nickname IS NOT NULL AND id = %s AND game_id = '%s'" % (playerId, gameId))
+	rows = db.fetch()
+
+	if len(rows) is not 0:
+		return rows[0]['nickname']
+	else:
+		return ''
 
 if __name__ == "__main__":
 	main()
