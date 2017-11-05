@@ -39,11 +39,11 @@ def processGame(notification_settings):
 	# get latest turn data
 	curl = constants.NP_CURL % (gameId, 'latest')
 	turnData = getJsonFromCurl(curl)
-	if turnData is None:
+	if turnData is None or turnData['turn_num'] is 0:
 		return
 
 	# check if new turn
-	db.query("SELECT * FROM game_turn WHERE game_id = '%s' AND id = '%s' and id != 0" % (gameId, turnData['turn_num']))
+	db.query("SELECT * FROM game_turn WHERE game_id = '%s' AND id = '%s'" % (gameId, turnData['turn_num']))
 	rows = db.fetch()
 
 	if len(rows) is 0:
@@ -245,12 +245,14 @@ def sendTurnWarning(db, turnData, notification_settings):
 	log("Posting warning. (%s, %s)" % (turnData['name'], notification_settings['game_id']))
 	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
 	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	hoursLeft = int((turnData['turn_end'] - time.time()) / 60 / 60 + .5)
 
 	variables = {
 		'%TURN%': turnData['turn_num'],
 		'%NAME%': turnData['name'],
 		'%TURNSTART%': starttime,
 		'%TURNEND%': endtime,
+		'%HOURS%': hoursLeft,
 		'\\n': '\n'
 	}
 
