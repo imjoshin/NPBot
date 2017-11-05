@@ -30,7 +30,7 @@ def processGame(notification_settings):
 		if settings is None:
 			return
 
-		log("New game found! ('%s', %s)" % (settings['name'], settings['id']))
+		log("New game found! (%s, %s)" % (settings['name'], settings['id']))
 		query = "INSERT INTO game (id, name, description, start_time, settings) VALUES ('%s', '%s', '%s', FROM_UNIXTIME('%s'), '%s')" % (gameId, settings['name'], settings['description'], settings['start_time'], json.dumps(settings))
 		db.query(query)
 	else:
@@ -47,10 +47,12 @@ def processGame(notification_settings):
 	rows = db.fetch()
 
 	if len(rows) is 0:
-		log("Turn %d started! ('%s', %s)" % (turnData['turn_num'], settings['name'], settings['id']))
+		log("Turn %d started! (%s, %s)" % (turnData['turn_num'], settings['name'], settings['id']))
+
+		# the notified players column is a hack for now. for some reason the db isn't defaulting
 		query = """
-		INSERT INTO game_turn (id, game_id, turn_start, turn_end, tick, productions, production_counter)
-		VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), %s, %s, %s)
+		INSERT INTO game_turn (id, game_id, turn_start, turn_end, tick, productions, production_counter, notified_players)
+		VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), %s, %s, %s, 64)
 		""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], turnData['tick'], turnData['productions'], turnData['production_counter'])
 		db.query(query)
 
@@ -69,6 +71,7 @@ def processGame(notification_settings):
 
 				if len(rows) is 0 and notification_settings['print_turns_taken']:
 					sendPlayerTurn(db, player, turnData, notification_settings)
+					# hack to force this to print first
 					time.sleep(.2)
 
 		# update players last turn who just took their turn last minute
@@ -84,7 +87,7 @@ def processGame(notification_settings):
 		rows = db.fetch()
 
 		if len(rows) is 0:
-			log("Found new player %s! ('%s', %s)" % (player['name'], settings['name'], settings['id']))
+			log("Found new player %s! (%s, %s)" % (player['name'], settings['name'], settings['id']))
 			query = """
 			INSERT INTO player (id, game_id, name, color, avatar, shape)
 			VALUES ('%s', '%s', '%s', '%s', %s, %s)
@@ -100,7 +103,7 @@ def processGame(notification_settings):
 
 		# just submitted and not AI
 		if len(rows) is 0 and player['ready'] and player['status'] is 0:
-			log("%s took their turn %d. ('%s', %s)" % (player['name'], turnData['turn_num'], settings['name'], settings['id']))
+			log("%s took their turn %d. (%s, %s)" % (player['name'], turnData['turn_num'], settings['name'], settings['id']))
 			query = "UPDATE player_turn SET taken_at = FROM_UNIXTIME('%s') WHERE player_id = %s AND turn_id = %s AND game_id = '%s'" % (int(time.time()), player['id'], turnData['turn_num'], gameId)
 			db.query(query)
 
@@ -120,13 +123,16 @@ def processGame(notification_settings):
 
 	if notification_settings['print_last_players']:
 		playersLeft = getPlayersLeft(turnData['players'])
-		if len(playersLeft) <= notification_settings['print_last_players_n']:
+		if len(playersLeft) <= notification_settings['print_last_players_n'] and len(playersLeft) is not 0:
 			db.query("SELECT * FROM game_turn WHERE notified_players <= %d AND id = %s AND game_id = '%s'" % (len(playersLeft), turnData['turn_num'], gameId))
 			rows = db.fetch()
 
 			# hasn't been notified of this number of players
 			if len(rows) is 0:
 				db.query("UPDATE game_turn SET notified_players = %d WHERE id = %s AND game_id = '%s'" % (len(playersLeft), turnData['turn_num'], gameId))
+
+				# hack to get this to print after turn taking
+				time.sleep(.2)
 				sendPlayerWarning(db, turnData, notification_settings)
 
 	db.close()
@@ -242,10 +248,10 @@ def sendPlayerTurn(db, playerData, turnData, notification_settings):
 	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def sendTurnWarning(db, turnData, notification_settings):
-	log("Posting warning. (%s, %s)" % (turnData['name'], notification_settings['game_id']))
 	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
 	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
 	hoursLeft = int((turnData['turn_end'] - time.time()) / 60 / 60 + .5)
+	log("Posting warning of %d hour(s). (%s, %s)" % (hoursLeft, turnData['name'], notification_settings['game_id']))
 
 	variables = {
 		'%TURN%': turnData['turn_num'],
@@ -316,7 +322,7 @@ def sendPlayerWarning(db, turnData, notification_settings):
 def getPlayersLeft(players):
 	left = []
 	for player in players:
-		if player['ready'] and player['status'] is 0:
+		if not player['ready'] and player['status'] is 0:
 			left.append(player)
 	return left
 
