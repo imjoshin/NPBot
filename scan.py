@@ -54,11 +54,6 @@ def processGame(notification_settings):
 		""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], turnData['tick'], turnData['productions'], turnData['production_counter'])
 		db.query(query)
 
-		# update players last turn who just took their turn last minute
-		if turnData['turn_num'] is not 1:
-			db.query("UPDATE player_turn SET taken_at = FROM_UNIXTIME('%s') WHERE taken_at IS NULL AND turn_id = %s AND game_id = '%s'" % (int(time.time()), turnData['turn_num'] - 1, gameId))
-			rows = db.fetch()
-
 		# insert a player turn for each, but don't set time taken
 		for player in turnData['players']:
 			query = """
@@ -66,6 +61,20 @@ def processGame(notification_settings):
 			VALUES (%s, %s, '%s', %s, %s, '%s', %s, %s, %s, %s, %s, %s)
 			""" % (turnData['turn_num'], player['id'], gameId, player['status'], player['rank'], json.dumps(player['tech']), player['total_carriers'], player['total_economy'], player['total_industry'], player['total_science'], player['total_ships'], player['total_stars'])
 			db.query(query)
+
+			# check for any missing turns and send notification if needed
+			if turnData['turn_num'] is not 1:
+				db.query("SELECT * FROM player_turn WHERE taken_at IS NOT NULL AND player_id = %s AND turn_id = %s AND game_id = '%s'" % (player['id'], turnData['turn_num'] - 1, gameId))
+				rows = db.fetch()
+
+				if len(rows) is 0 and notification_settings['print_turns_taken']:
+					sendPlayerTurn(db, player, turnData, notification_settings)
+					time.sleep(.2)
+
+		# update players last turn who just took their turn last minute
+		if turnData['turn_num'] is not 1:
+			db.query("UPDATE player_turn SET taken_at = FROM_UNIXTIME('%s') WHERE taken_at IS NULL AND turn_id = %s AND game_id = '%s'" % (int(time.time()), turnData['turn_num'] - 1, gameId))
+			rows = db.fetch()
 
 		sendTurn(db, turnData, notification_settings)
 
@@ -96,7 +105,7 @@ def processGame(notification_settings):
 			db.query(query)
 
 			if notification_settings['print_turns_taken']:
-				sendPlayerTurn(player, turnData['turn_num'], notification_settings)
+				sendPlayerTurn(db, player, turnData, notification_settings)
 
 	if notification_settings['print_warning']:
 		warningTime = turnData['turn_end'] - (60 * 60 * notification_settings['print_warning_n'])
@@ -107,7 +116,7 @@ def processGame(notification_settings):
 			# not notified yet
 			if len(rows) is 0:
 				db.query("UPDATE game_turn SET notified = 1 WHERE id = %s AND game_id = '%s'" % (turnData['turn_num'], gameId))
-				sendTurnWarning(turnData, notification_settings)
+				sendTurnWarning(db, turnData, notification_settings)
 
 	if notification_settings['print_last_players']:
 		playersLeft = getPlayersLeft(turnData['players'])
@@ -118,7 +127,7 @@ def processGame(notification_settings):
 			# hasn't been notified of this number of players
 			if len(rows) is 0:
 				db.query("UPDATE game_turn SET notified_players = %d WHERE id = %s AND game_id = '%s'" % (len(playersLeft), turnData['turn_num'], gameId))
-				sendPlayerWarning(turnData, notification_settings)
+				sendPlayerWarning(db, turnData, notification_settings)
 
 	db.close()
 
@@ -128,47 +137,48 @@ def sendTurn(db, turnData, notification_settings):
 	players = sorted(turnData['players'], key=lambda k: k['rank'])
 	attachments = []
 
-	for player in players:
-		status = "BOT: " if player['status'] is not 0 else ""
-		nickname = getNickName(db, player['id'], notification_settings['game_id'])
+	if notification_settings['print_leaderboard']:
+		for player in players:
+			status = "BOT: " if player['status'] is not 0 else ""
+			nickname = getNickName(db, player['id'], notification_settings['game_id'])
 
-		# player is still alive
-		if player['total_stars'] is not 0:
-			rankDif = getRankDif(player['rank'], player['rank_last']) if 'rank_last' in player else ""
-			title = '%d. %s%s%s %s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '', rankDif)
+			# player is still alive
+			if player['total_stars'] is not 0:
+				rankDif = getRankDif(player['rank'], player['rank_last']) if 'rank_last' in player else ""
+				title = '%d. %s%s%s %s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '', rankDif)
 
-			# get total tech
-			tech = 0
-			for techName in player['tech']:
-				tech += int(player['tech'][techName]['level'])
+				# get total tech
+				tech = 0
+				for techName in player['tech']:
+					tech += int(player['tech'][techName]['level'])
 
-			variables = {
-				'%STARS%': player['total_stars'],
-				'%SHIPS%': player['total_ships'],
-				'%TECH%': tech,
-				'%ECON%': player['total_economy'],
-				'%INDUSTRY%': player['total_industry'],
-				'%SCIENCE%': player['total_science'],
-				'\\n': '\n'
-			}
+				variables = {
+					'%STARS%': player['total_stars'],
+					'%SHIPS%': player['total_ships'],
+					'%TECH%': tech,
+					'%ECON%': player['total_economy'],
+					'%INDUSTRY%': player['total_industry'],
+					'%SCIENCE%': player['total_science'],
+					'\\n': '\n'
+				}
 
-			# replace variables in text
-			text = replaceArray(notification_settings['print_leaderboard_format'], variables)
+				# replace variables in text
+				text = replaceArray(notification_settings['print_leaderboard_format'], variables)
 
-			attachments.append({
-				'color': player['color'],
-				'title': title,
-				'text': text,
-				"mrkdwn_in": ["text"]
-			})
-		# player is dead
-		else:
-			title = '%d. %s%s%s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '')
+				attachments.append({
+					'color': player['color'],
+					'title': title,
+					'text': text,
+					"mrkdwn_in": ["text"]
+				})
+			# player is dead
+			else:
+				title = '%d. %s%s%s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '')
 
-			attachments.append({
-				'color': '#999999',
-				'title': title
-			})
+				attachments.append({
+					'color': '#999999',
+					'title': title
+				})
 
 	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
 	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
@@ -199,12 +209,39 @@ def sendTurn(db, turnData, notification_settings):
 		print "Posting to discord..."
 
 def sendPlayerTurn(db, playerData, turnData, notification_settings):
-	print "Sending player..."
+	nickname = getNickName(db, playerData['id'], notification_settings['game_id'])
+	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
 
-def sendTurnWarning(turnData, notification_settings):
+	variables = {
+		'%TURN%': turnData['turn_num'],
+		'%NAME%': turnData['name'],
+		'%TURNSTART%': starttime,
+		'%TURNEND%': endtime,
+		'%PLAYER%': playerData['name'] + (' (%s)' % nickname if nickname is not '' else '')
+	}
+
+	# replace variables in text
+	text = replaceArray(notification_settings['print_turns_taken_format'], variables)
+
+	post = {
+		'username': notification_settings['webhook_name'],
+		'channel': notification_settings['webhook_channel'],
+		'icon_url': notification_settings['webhook_image'],
+		'attachments': [{
+			'color': playerData['color'],
+			'text': text,
+			"mrkdwn_in": ["text"]
+		}],
+	}
+
+	command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+def sendTurnWarning(db, turnData, notification_settings):
 	print "Sending turn warning..."
 
-def sendPlayerWarning(turnData, notification_settings):
+def sendPlayerWarning(db, turnData, notification_settings):
 	print "Sending player warning..."
 
 def getPlayersLeft(players):
