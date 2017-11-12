@@ -34,12 +34,26 @@ def processGame(notification_settings):
 		query = "INSERT INTO game (id, name, description, start_time, settings) VALUES ('%s', '%s', '%s', FROM_UNIXTIME('%s'), '%s')" % (gameId, settings['name'], settings['description'], settings['start_time'], json.dumps(settings))
 		db.query(query)
 	else:
+		if rows[0]['game_over'] is 1:
+			return
+
 		settings = json.loads(rows[0]['settings'])
 
 	# get latest turn data
 	curl = constants.NP_CURL % (gameId, 'latest')
 	turnData = getJsonFromCurl(curl)
-	if turnData is None or turnData['turn_num'] is 0:
+	if turnData is None:
+		return
+
+	# check if game over
+	if 'game_over' in turnData and turnData['game_over'] is 1:
+		sendTurn(db, turnData, notification_settings, True)
+		log("%s just ended!" % (turnData['name']))
+		query = "UPDATE game SET game_over = 1 WHERE id = %s" % (gameId)
+		db.query(query)
+		return
+
+	if 'turn_num' not in turnData or turnData['turn_num'] is 0:
 		return
 
 	# check if new turn
@@ -79,7 +93,7 @@ def processGame(notification_settings):
 			db.query("UPDATE player_turn SET taken_at = FROM_UNIXTIME('%s') WHERE taken_at IS NULL AND turn_id = %s AND game_id = '%s'" % (int(time.time()), turnData['turn_num'] - 1, gameId))
 			rows = db.fetch()
 
-		sendTurn(db, turnData, notification_settings)
+		sendTurn(db, turnData, notification_settings, False)
 
 	for player in turnData['players']:
 		# check if new player
@@ -137,7 +151,7 @@ def processGame(notification_settings):
 
 	db.close()
 
-def sendTurn(db, turnData, notification_settings):
+def sendTurn(db, turnData, notification_settings, gameOver):
 	log("Posting game new turn %d. (%s, %s)" % (turnData['turn_num'], turnData['name'], notification_settings['game_id']))
 	# sort players by rank
 	players = sorted(turnData['players'], key=lambda k: k['rank'])
@@ -145,8 +159,9 @@ def sendTurn(db, turnData, notification_settings):
 
 	if notification_settings['print_leaderboard']:
 		for player in players:
-			status = "BOT: " if player['status'] is not 0 else ""
+			status = "AI: " if player['status'] is not 0 else ""
 			nickname = getNickName(db, player['id'], notification_settings['game_id'])
+			player['nickname'] = nickname
 
 			# player is still alive
 			if player['total_stars'] is not 0:
@@ -197,8 +212,12 @@ def sendTurn(db, turnData, notification_settings):
 		'\\n': '\n'
 	}
 
+	if gameOver:
+		variables['%WINNER%'] = "%s%s" % (players[0]['name'], ' (%s)' % players[0]['nickname'] if players[0]['nickname'] is not '' else '')
+
 	# replace variables in text
-	text = replaceArray(notification_settings['print_turn_start_format'], variables)
+	textFormat = notification_settings['print_turn_start_format'] if not gameOver else notification_settings['print_game_over_format']
+	text = replaceArray(textFormat, variables)
 
 	if 'hooks.slack.com/services' in notification_settings['webhook_url']:
 		post = {
