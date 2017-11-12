@@ -186,20 +186,33 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 				# replace variables in text
 				text = replaceArray(notification_settings['print_leaderboard_format'], variables)
 
-				attachments.append({
-					'color': player['color'],
-					'title': title,
-					'text': text,
-					"mrkdwn_in": ["text"]
-				})
+				if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+					attachments.append({
+						'color': player['color'],
+						'title': title,
+						'text': text,
+						"mrkdwn_in": ["text"]
+					})
+				elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+					attachments.append({
+						'description': text,
+						'title': title,
+						'color': long(player['color'][1:], 16)
+					})
 			# player is dead
 			else:
 				title = '%d. %s%s%s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '')
 
-				attachments.append({
-					'color': '#999999',
-					'title': title
-				})
+				if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+					attachments.append({
+						'color': '#999999',
+						'title': title
+					})
+				elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+					attachments.append({
+						'color': long('999999', 16),
+						'title': title
+					})
 
 	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
 	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
@@ -228,11 +241,16 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 			'text': text
 	    }
 
-		command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
-		process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
 	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
-		print "Posting to discord..."
+		post = {
+			'username': notification_settings['webhook_name'],
+			'avatar_url': notification_settings['webhook_image'],
+			'content': text,
+			'embeds': attachments
+		}
+
+	command = constants.WEBHOOK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def sendPlayerTurn(db, playerData, turnData, notification_settings):
 	log("Posting %s's turn %d. (%s, %s)" % (playerData['name'], turnData['turn_num'], turnData['name'], notification_settings['game_id']))
@@ -252,18 +270,31 @@ def sendPlayerTurn(db, playerData, turnData, notification_settings):
 	# replace variables in text
 	text = replaceArray(notification_settings['print_turns_taken_format'], variables)
 
-	post = {
-		'username': notification_settings['webhook_name'],
-		'channel': notification_settings['webhook_channel'],
-		'icon_url': notification_settings['webhook_image'],
-		'attachments': [{
-			'color': playerData['color'],
-			'text': text,
-			"mrkdwn_in": ["text"]
-		}],
-	}
+	if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+		post = {
+			'username': notification_settings['webhook_name'],
+			'channel': notification_settings['webhook_channel'],
+			'icon_url': notification_settings['webhook_image'],
+			'attachments': [{
+				'color': playerData['color'],
+				'text': text,
+				"mrkdwn_in": ["text"]
+			}],
+		}
 
-	command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+		post = {
+			'username': notification_settings['webhook_name'],
+			'avatar_url': notification_settings['webhook_image'],
+			'embeds': [
+				{
+					'description': text,
+					'color': long(playerData['color'][1:], 16)
+				}
+			]
+		}
+
+	command = constants.WEBHOOK_CURL % (json.dumps(post), notification_settings['webhook_url'])
 	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def sendTurnWarning(db, turnData, notification_settings):
@@ -284,18 +315,30 @@ def sendTurnWarning(db, turnData, notification_settings):
 	# replace variables in text
 	text = replaceArray(notification_settings['print_warning_format'], variables)
 
-	post = {
-		'username': notification_settings['webhook_name'],
-		'channel': notification_settings['webhook_channel'],
-		'icon_url': notification_settings['webhook_image'],
-		'attachments': [{
-			'color': '#FFFFFF',
-			'text': text,
-			"mrkdwn_in": ["text"]
-		}],
-	}
+	if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+		post = {
+			'username': notification_settings['webhook_name'],
+			'channel': notification_settings['webhook_channel'],
+			'icon_url': notification_settings['webhook_image'],
+			'attachments': [{
+				'color': '#FFFFFF',
+				'text': text,
+				"mrkdwn_in": ["text"]
+			}],
+		}
+	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+		post = {
+			'username': notification_settings['webhook_name'],
+			'avatar_url': notification_settings['webhook_image'],
+			'embeds': [
+				{
+					'description': text,
+					'color': long('FFFFFF', 16)
+				}
+			]
+		}
 
-	command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+	command = constants.WEBHOOK_CURL % (json.dumps(post), notification_settings['webhook_url'])
 	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def sendPlayerWarning(db, turnData, notification_settings):
@@ -323,19 +366,32 @@ def sendPlayerWarning(db, turnData, notification_settings):
 
 	# replace variables in text
 	text = replaceArray(notification_settings['print_last_players_format'], variables)
+	printColor = playersLeft[0]['color'] if len(playersLeft) is 1 else '#FFFFFF'
 
-	post = {
-		'username': notification_settings['webhook_name'],
-		'channel': notification_settings['webhook_channel'],
-		'icon_url': notification_settings['webhook_image'],
-		'attachments': [{
-			'color': playersLeft[0]['color'] if len(playersLeft) is 1 else '#FFFFFF',
-			'text': text,
-			"mrkdwn_in": ["text"]
-		}],
-	}
+	if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+		post = {
+			'username': notification_settings['webhook_name'],
+			'channel': notification_settings['webhook_channel'],
+			'icon_url': notification_settings['webhook_image'],
+			'attachments': [{
+				'color': printColor,
+				'text': text,
+				"mrkdwn_in": ["text"]
+			}],
+		}
+	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+		post = {
+			'username': notification_settings['webhook_name'],
+			'avatar_url': notification_settings['webhook_image'],
+			'embeds': [
+				{
+					'description': text,
+					'color': long(printColor[1:], 16)
+				}
+			]
+		}
 
-	command = constants.SLACK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+	command = constants.WEBHOOK_CURL % (json.dumps(post), notification_settings['webhook_url'])
 	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def getPlayersLeft(players):
