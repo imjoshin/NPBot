@@ -404,9 +404,9 @@ def getPlayersLeft(players):
 def getRankDif(thisTurn, lastTurn):
 	# determine rank change
 	if thisTurn > lastTurn:
-		return ":red-down: %d" % (thisTurn - lastTurn)
+		return "▼ %d" % (thisTurn - lastTurn)
 	elif thisTurn < lastTurn:
-		return ":green-up: %d" % (lastTurn - thisTurn)
+		return "▲ %d" % (lastTurn - thisTurn)
 	else:
 		return ""
 
