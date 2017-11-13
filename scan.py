@@ -404,9 +404,9 @@ def getPlayersLeft(players):
 def getRankDif(thisTurn, lastTurn):
 	# determine rank change
 	if thisTurn > lastTurn:
-		return "▼ %d" % (thisTurn - lastTurn)
+		return ("(-%d)" % (thisTurn - lastTurn)).encode('utf-8').strip()
 	elif thisTurn < lastTurn:
-		return "▲ %d" % (lastTurn - thisTurn)
+		return ("(+%d)" % (lastTurn - thisTurn)).encode('utf-8').strip()
 	else:
 		return ""
 
