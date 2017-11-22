@@ -64,11 +64,18 @@ def processGame(notification_settings):
 		log("Turn %d started! (%s, %s)" % (turnData['turn_num'], settings['name'], settings['id']))
 
 		# the notified players column is a hack for now. for some reason the db isn't defaulting
-		query = """
-		INSERT INTO game_turn (id, game_id, turn_start, turn_end, tick, productions, production_counter, notified_players)
-		VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), %s, %s, %s, 64)
-		""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], turnData['tick'], turnData['productions'], turnData['production_counter'])
-		db.query(query)
+		if 'stars' in turnData and 'carriers' in turnData:
+			query = """
+			INSERT INTO game_turn (id, game_id, turn_start, turn_end, stars, carriers, tick, productions, production_counter, notified_players)
+			VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), '%s', '%s', %s, %s, %s, 64)
+			""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], json.dumps(turnData['stars']), json.dumps(turnData['carriers']), turnData['tick'], turnData['productions'], turnData['production_counter'])
+			db.query(query)
+		else:
+			query = """
+			INSERT INTO game_turn (id, game_id, turn_start, turn_end, tick, productions, production_counter, notified_players)
+			VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), %s, %s, %s, 64)
+			""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], turnData['tick'], turnData['productions'], turnData['production_counter'])
+			db.query(query)
 
 		# insert a player turn for each, but don't set time taken
 		for player in turnData['players']:
@@ -238,6 +245,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 	        'channel': notification_settings['webhook_channel'],
 	        'icon_url': notification_settings['webhook_image'],
 	        'attachments': attachments,
+			'link_names': 1,
 			'text': text
 	    }
 
@@ -280,6 +288,7 @@ def sendPlayerTurn(db, playerData, turnData, notification_settings):
 				'text': text,
 				"mrkdwn_in": ["text"]
 			}],
+			'link_names': 1
 		}
 
 	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
@@ -325,6 +334,7 @@ def sendTurnWarning(db, turnData, notification_settings):
 				'text': text,
 				"mrkdwn_in": ["text"]
 			}],
+			'link_names': 1
 		}
 	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
 		post = {
@@ -378,6 +388,7 @@ def sendPlayerWarning(db, turnData, notification_settings):
 				'text': text,
 				"mrkdwn_in": ["text"]
 			}],
+			'link_names': 1
 		}
 	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
 		post = {
@@ -404,9 +415,9 @@ def getPlayersLeft(players):
 def getRankDif(thisTurn, lastTurn):
 	# determine rank change
 	if thisTurn > lastTurn:
-		return ("(-%d)" % (thisTurn - lastTurn)).encode('utf-8').strip()
+		return ("[-%d]" % (thisTurn - lastTurn)).encode('utf-8').strip()
 	elif thisTurn < lastTurn:
-		return ("(+%d)" % (lastTurn - thisTurn)).encode('utf-8').strip()
+		return ("[+%d]" % (lastTurn - thisTurn)).encode('utf-8').strip()
 	else:
 		return ""
 

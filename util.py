@@ -6,7 +6,7 @@ def getJsonFromCurl(curl):
 		process = subprocess.check_output(('timeout %d {}' % (constants.CURL_TIMEOUT)).format(curl), shell=True, stderr=subprocess.PIPE)
 	except subprocess.CalledProcessError as exc:
 		if exc.returncode == 124:
-			log("Reached timeout of %d seconds on curl. (%s)" % (constants.CURL_TIMEOUT), curl)
+			log("Reached timeout of %d seconds on curl. (%s)" % (constants.CURL_TIMEOUT, curl))
 			return None
 
 	try:
