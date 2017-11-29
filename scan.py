@@ -8,11 +8,14 @@ def main():
 	lastPlayerNotified = False
 
 	while(1):
-		db = Database()
-		db.query("SELECT * FROM notification_settings")
+		try:
+			db = Database()
+			db.query("SELECT * FROM notification_settings")
 
-		for row in db.fetch():
-			processGame(row)
+			for row in db.fetch():
+				processGame(row)
+		except:
+			pass
 
 		# sleep after all fetches have been made
 		time.sleep(constants.SLEEP_TIME)
@@ -173,7 +176,8 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 			# player is still alive
 			if player['total_stars'] is not 0:
 				rankDif = getRankDif(player['rank'], player['rank_last']) if 'rank_last' in player else ""
-				title = '%d. %s%s%s %s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '', rankDif)
+				printNickname = ' (%s)' % nickname if nickname is not '' and player['status'] is 0 else ''
+				title = '%d. %s%s%s %s' % (player['rank'], status, player['name'], printNickname, rankDif)
 
 				# get total tech
 				tech = 0
@@ -208,7 +212,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 					})
 			# player is dead
 			else:
-				title = '%d. %s%s%s' % (player['rank'], status, player['name'], ' (%s)' % nickname if nickname is not '' else '')
+				title = '%d. %s%s' % (player['rank'], status, player['name'])
 
 				if 'hooks.slack.com/services' in notification_settings['webhook_url']:
 					attachments.append({
