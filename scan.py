@@ -325,6 +325,14 @@ def sendTurnWarning(db, turnData, notification_settings):
 	turnEndTime = convertTime(int(turnData['turn_end']))
 	starttime = turnStartTime.strftime('%a, %b %-d at %-I:%M:%S %p')
 	endtime = turnEndTime.strftime('%a, %b %-d at %-I:%M:%S %p')
+	playersLeft = getPlayersLeft(turnData['players'])
+	playersFormatted = []
+
+	for player in playersLeft:
+		nickname = getNickName(db, player['id'], notification_settings['game_id'])
+		playersFormatted.append(player['name'] + (' (%s)' % nickname if nickname is not '' else ''))
+
+	players = ', '.join(playersFormatted)
 
 	hoursLeft = int((turnData['turn_end'] - time.time()) / 60 / 60 + .5)
 	log("Posting warning of %d hour(s). (%s, %s)" % (hoursLeft, turnData['name'], notification_settings['game_id']))
@@ -335,6 +343,7 @@ def sendTurnWarning(db, turnData, notification_settings):
 		'%TURNSTART%': starttime,
 		'%TURNEND%': endtime,
 		'%HOURS%': hoursLeft,
+		'%PLAYERS%': players,
 		'\\n': '\n'
 	}
 
