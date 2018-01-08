@@ -183,7 +183,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 
 				# get total tech
 				tech = 0
-				for techName in player['tech'] and player['status'] is 0:
+				for techName in player['tech']:
 					tech += int(player['tech'][techName]['level'])
 
 				variables = {
@@ -199,7 +199,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 				# replace variables in text
 				text = replaceArray(notification_settings['print_leaderboard_format'], variables)
 
-				if hasDiscordNickname:
+				if hasDiscordNickname and player['status'] is 0:
 					text = "%s\n%s" % (nickname, text)
 
 				if 'hooks.slack.com/services' in notification_settings['webhook_url']:
