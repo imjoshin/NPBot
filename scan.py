@@ -1,4 +1,4 @@
-import subprocess, time, json, datetime, os, sys
+import subprocess, time, json, datetime, os, sys, re
 import constants, auth
 from database import Database
 from util import *
@@ -94,7 +94,7 @@ def processGame(notification_settings):
 				rows = db.fetch()
 
 				if len(rows) is 0 and notification_settings['print_turns_taken']:
-					sendPlayerTurn(db, player, turnData, notification_settings)
+					sendPlayerTurn(db, player, turnData, notification_settings, True)
 					# hack to force this to print first
 					time.sleep(.2)
 
@@ -175,8 +175,10 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 
 			# player is still alive
 			if player['total_stars'] is not 0:
+				hasDiscordNickname = re.match(r"<@[0-9]{12,}>", nickname)
+
 				rankDif = getRankDif(player['rank'], player['rank_last']) if 'rank_last' in player else ""
-				printNickname = ' (%s)' % nickname if nickname is not '' and player['status'] is 0 else ''
+				printNickname = ' (%s)' % nickname if nickname is not '' and not hasDiscordNickname and player['status'] is 0 else ''
 				title = '%d. %s%s%s %s' % (player['rank'], status, player['name'], printNickname, rankDif)
 
 				# get total tech
@@ -196,6 +198,9 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 
 				# replace variables in text
 				text = replaceArray(notification_settings['print_leaderboard_format'], variables)
+
+				if hasDiscordNickname:
+					text = "%s\n%s" % (nickname, text)
 
 				if 'hooks.slack.com/services' in notification_settings['webhook_url']:
 					attachments.append({
@@ -225,8 +230,10 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 						'title': title
 					})
 
-	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
-	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	turnStartTime = convertTime(int(turnData['turn_start']))
+	turnEndTime = convertTime(int(turnData['turn_end']))
+	starttime = turnStartTime.strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = turnEndTime.strftime('%a, %b %-d at %-I:%M:%S %p')
 
 	variables = {
 		'%TURN%': turnData['turn_num'],
@@ -264,14 +271,17 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 	command = constants.WEBHOOK_CURL % (json.dumps(post), notification_settings['webhook_url'])
 	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-def sendPlayerTurn(db, playerData, turnData, notification_settings):
-	log("Posting %s's turn %d. (%s, %s)" % (playerData['name'], turnData['turn_num'], turnData['name'], notification_settings['game_id']))
+def sendPlayerTurn(db, playerData, turnData, notification_settings, lastPlayer = False):
+	log("Posting %s's turn %d. (%s, %s)" % (playerData['name'], turnData['turn_num'] - (1 if lastPlayer else 0), turnData['name'], notification_settings['game_id']))
 	nickname = getNickName(db, playerData['id'], notification_settings['game_id'])
-	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
-	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+
+	turnStartTime = convertTime(int(turnData['turn_start']))
+	turnEndTime = convertTime(int(turnData['turn_end']))
+	starttime = turnStartTime.strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = turnEndTime.strftime('%a, %b %-d at %-I:%M:%S %p')
 
 	variables = {
-		'%TURN%': turnData['turn_num'],
+		'%TURN%': turnData['turn_num'] - (1 if lastPlayer else 0),
 		'%NAME%': turnData['name'],
 		'%TURNSTART%': starttime,
 		'%TURNEND%': endtime,
@@ -311,8 +321,11 @@ def sendPlayerTurn(db, playerData, turnData, notification_settings):
 	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 def sendTurnWarning(db, turnData, notification_settings):
-	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
-	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+	turnStartTime = convertTime(int(turnData['turn_start']))
+	turnEndTime = convertTime(int(turnData['turn_end']))
+	starttime = turnStartTime.strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = turnEndTime.strftime('%a, %b %-d at %-I:%M:%S %p')
+
 	hoursLeft = int((turnData['turn_end'] - time.time()) / 60 / 60 + .5)
 	log("Posting warning of %d hour(s). (%s, %s)" % (hoursLeft, turnData['name'], notification_settings['game_id']))
 
@@ -357,8 +370,11 @@ def sendTurnWarning(db, turnData, notification_settings):
 
 def sendPlayerWarning(db, turnData, notification_settings):
 	log("Posting player warning. (%s, %s)" % (turnData['name'], notification_settings['game_id']))
-	starttime = datetime.datetime.fromtimestamp(int(turnData['turn_start'])).strftime('%a, %b %-d at %-I:%M:%S %p')
-	endtime = datetime.datetime.fromtimestamp(int(turnData['turn_end'])).strftime('%a, %b %-d at %-I:%M:%S %p')
+
+	turnStartTime = convertTime(int(turnData['turn_start']))
+	turnEndTime = convertTime(int(turnData['turn_end']))
+	starttime = turnStartTime.strftime('%a, %b %-d at %-I:%M:%S %p')
+	endtime = turnEndTime.strftime('%a, %b %-d at %-I:%M:%S %p')
 	playersLeft = getPlayersLeft(turnData['players'])
 	playersFormatted = []
 
@@ -433,6 +449,11 @@ def getNickName(db, playerId, gameId):
 		return rows[0]['nickname']
 	else:
 		return ''
+
+def convertTime(timestamp):
+	dt = datetime.datetime.fromtimestamp(timestamp)
+	local_dt = dt - datetime.timedelta(hours=5)
+	return local_dt
 
 if __name__ == "__main__":
 	main()
