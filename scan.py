@@ -175,7 +175,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 
 			# player is still alive
 			if player['total_stars'] is not 0:
-				hasDiscordNickname = re.match(r"<@[0-9]{12,}>", nickname)
+				hasDiscordNickname = re.match(r"<@[0-9!]{12,}>", nickname)
 
 				rankDif = getRankDif(player['rank'], player['rank_last']) if 'rank_last' in player else ""
 				printNickname = ' (%s)' % nickname if nickname is not '' and not hasDiscordNickname and player['status'] is 0 else ''
