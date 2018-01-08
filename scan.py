@@ -183,7 +183,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 
 				# get total tech
 				tech = 0
-				for techName in player['tech']:
+				for techName in player['tech'] and player['status'] is 0:
 					tech += int(player['tech'][techName]['level'])
 
 				variables = {
