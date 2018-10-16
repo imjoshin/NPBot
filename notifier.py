@@ -9,6 +9,9 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 	players = sorted(turnData['players'], key=lambda k: k['rank'])
 	attachments = []
 
+	isSlack = 'hooks.slack.com/services' in notification_settings['webhook_url']
+	isDiscord = 'discordapp.com/api/webhooks' in notification_settings['webhook_url']
+
 	if notification_settings['print_leaderboard']:
 		for player in players:
 			status = "AI: " if player['status'] is not 0 else ""
@@ -44,14 +47,14 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 				if hasDiscordNickname and player['status'] is 0:
 					text = "%s\n%s" % (nickname, text)
 
-				if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+				if isSlack:
 					attachments.append({
 						'color': player['color'],
 						'title': title,
 						'text': text,
 						"mrkdwn_in": ["text"]
 					})
-				elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+				elif isDiscord:
 					attachments.append({
 						'description': text,
 						'title': title,
@@ -61,12 +64,12 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 			else:
 				title = '%d. %s%s' % (player['rank'], status, player['name'])
 
-				if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+				if isSlack:
 					attachments.append({
 						'color': '#999999',
 						'title': title
 					})
-				elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+				elif isDiscord:
 					attachments.append({
 						'color': long('999999', 16),
 						'title': title
@@ -77,9 +80,14 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 	starttime = turnStartTime.strftime('%a, %b %-d at %-I:%M:%S %p')
 	endtime = turnEndTime.strftime('%a, %b %-d at %-I:%M:%S %p')
 
+	namelink = "[%s](https://np.ironhelmet.com/game/%s)" % (turnData['name'], turnData['game_id'])
+	if isSlack:
+		namelink = "<https://np.ironhelmet.com/game/%s|%s>" % (turnData['game_id'], turnData['name'])
+
 	variables = {
 		'%TURN%': turnData['turn_num'],
 		'%NAME%': turnData['name'],
+		'%NAMELINK%': namelink,
 		'%TURNSTART%': starttime,
 		'%TURNEND%': endtime,
 		'\\n': '\n'
@@ -92,7 +100,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 	textFormat = notification_settings['print_turn_start_format'] if not gameOver else notification_settings['print_game_over_format']
 	text = replaceArray(textFormat, variables)
 
-	if 'hooks.slack.com/services' in notification_settings['webhook_url']:
+	if isSlack:
 		post = {
 			'username': notification_settings['webhook_name'],
 			'channel': notification_settings['webhook_channel'],
@@ -102,7 +110,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 			'text': text
 		}
 
-	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+	elif isDiscord:
 		post = {
 			'username': notification_settings['webhook_name'],
 			'avatar_url': notification_settings['webhook_image'],

@@ -3,3 +3,4 @@ auth.py
 log
 log_debug
 error_log
+error
