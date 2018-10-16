@@ -6,19 +6,24 @@ def getJsonFromCurl(curl):
 		process = subprocess.check_output(('timeout %d {}' % (constants.CURL_TIMEOUT)).format(curl), shell=True, stderr=subprocess.PIPE)
 	except subprocess.CalledProcessError as exc:
 		if exc.returncode == 124:
-			log("Reached timeout of %d seconds on curl. (%s)" % (constants.CURL_TIMEOUT, curl))
+			log("Reached timeout of %d seconds on curl. (%s)" % (constants.CURL_TIMEOUT, curl), "error")
 			return None
 
 	try:
 		ret = json.loads(process)
 	except:
-		log("Failed to decode json from curl. (%s)" % (curl))
+		log("Failed to decode json from curl. (%s)" % (curl), "error")
 		return None
 
 	return ret
 
-def log(str):
-	logFile = "log" if not constants.DEBUG else "log_debug"
+def convertTime(timestamp):
+	dt = datetime.datetime.fromtimestamp(timestamp)
+	local_dt = dt - datetime.timedelta(hours=5)
+	return local_dt
+
+def log(str, logFile = "log"):
+	logFile = logFile if not constants.DEBUG else "%s_debug" % (logFile)
 	p = "%s : %s" % (datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'), str)
 	print(p)
 	with open(logFile, "a") as l:
