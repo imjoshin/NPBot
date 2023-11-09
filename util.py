@@ -2,6 +2,7 @@ import subprocess, json, datetime
 import constants
 
 def getJsonFromCurl(curl):
+	ret = {}
 	try:
 		process = subprocess.check_output(('timeout %d {}' % (constants.CURL_TIMEOUT)).format(curl), shell=True, stderr=subprocess.PIPE)
 		ret = json.loads(process)

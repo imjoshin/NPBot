@@ -2,6 +2,7 @@ import subprocess, time, json, datetime, os, sys, re
 import constants, auth, notifier, gameUtil
 from database import Database
 from util import *
+import traceback
 
 def main():
 	global lastPlayerNotified
@@ -15,7 +16,9 @@ def main():
 			for row in db.fetch():
 				processGame(row)
 		except Exception as e:
+			log("Errored during main loop")
 			log(e)
+			traceback.print_exc()
 			pass
 
 		# sleep after all fetches have been made
