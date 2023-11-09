@@ -4,13 +4,11 @@ import constants
 def getJsonFromCurl(curl):
 	try:
 		process = subprocess.check_output(('timeout %d {}' % (constants.CURL_TIMEOUT)).format(curl), shell=True, stderr=subprocess.PIPE)
+		ret = json.loads(process)
 	except subprocess.CalledProcessError as exc:
 		if exc.returncode == 124:
 			log("Reached timeout of %d seconds on curl. (%s)" % (constants.CURL_TIMEOUT, curl), "error")
 			return None
-
-	try:
-		ret = json.loads(process)
 	except Exception as e:
 		log("Failed to decode json from curl. (%s)" % (curl), "error")
 		log(e)
