@@ -11,8 +11,9 @@ def getJsonFromCurl(curl):
 
 	try:
 		ret = json.loads(process)
-	except:
+	except Exception as e:
 		log("Failed to decode json from curl. (%s)" % (curl), "error")
+		log(e)
 		return None
 
 	return ret

@@ -14,7 +14,8 @@ def main():
 
 			for row in db.fetch():
 				processGame(row)
-		except:
+		except Exception as e:
+			log(e)
 			pass
 
 		# sleep after all fetches have been made
@@ -34,7 +35,7 @@ def processGame(notification_settings):
 			return
 
 		log("New game found! (%s, %s)" % (settings['name'], settings['id']))
-		query = "INSERT INTO game (id, name, description, start_time, settings) VALUES ('%s', '%s', '%s', FROM_UNIXTIME('%s'), '%s')" % (gameId, settings['name'], settings['description'], settings['start_time'], json.dumps(settings))
+		query = "INSERT INTO game (id, name, description, start_time, settings) VALUES ('%s', '%s', '%s', FROM_UNIXTIME('%s'), '%s')" % (gameId, settings['name'], settings['description'], settings['start_time'] / 1000, json.dumps(settings))
 		db.query(query)
 	else:
 		if rows[0]['game_over'] is 1:
@@ -71,19 +72,19 @@ def processGame(notification_settings):
 			query = """
 			INSERT INTO game_turn (id, game_id, turn_start, turn_end, stars, carriers, tick, productions, production_counter, notified_players)
 			VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), '%s', '%s', %s, %s, %s, 64)
-			""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], json.dumps(turnData['stars']), json.dumps(turnData['carriers']), turnData['tick'], turnData['productions'], turnData['production_counter'])
+			""" % (turnData['turn_num'], gameId, turnData['turn_start'] / 1000, turnData['turn_end'] / 1000, json.dumps(turnData['stars']), json.dumps(turnData['carriers']), turnData['tick'], turnData['productions'], turnData['production_counter'])
 			db.query(query)
 		else:
 			query = """
 			INSERT INTO game_turn (id, game_id, turn_start, turn_end, tick, productions, production_counter, notified_players)
 			VALUES ('%s', '%s', FROM_UNIXTIME('%s'), FROM_UNIXTIME('%s'), %s, %s, %s, 64)
-			""" % (turnData['turn_num'], gameId, turnData['turn_start'], turnData['turn_end'], turnData['tick'], turnData['productions'], turnData['production_counter'])
+			""" % (turnData['turn_num'], gameId, turnData['turn_start'] / 1000, turnData['turn_end'] / 1000, turnData['tick'], turnData['productions'], turnData['production_counter'])
 			db.query(query)
 
 		# insert a player turn for each, but don't set time taken
 		for player in turnData['players']:
 			query = """
-			INSERT INTO player_turn (turn_id, player_id, game_id, status, rank, tech, total_carriers, total_economy, total_industry, total_science, total_ships, total_stars)
+			INSERT INTO player_turn (turn_id, player_id, game_id, status, `rank`, tech, total_carriers, total_economy, total_industry, total_science, total_ships, total_stars)
 			VALUES (%s, %s, '%s', %s, %s, '%s', %s, %s, %s, %s, %s, %s)
 			""" % (turnData['turn_num'], player['id'], gameId, player['status'], player['rank'], json.dumps(player['tech']), player['total_carriers'], player['total_economy'], player['total_industry'], player['total_science'], player['total_ships'], player['total_stars'])
 			db.query(query)

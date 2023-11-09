@@ -10,7 +10,7 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 	attachments = []
 
 	isSlack = 'hooks.slack.com/services' in notification_settings['webhook_url']
-	isDiscord = 'discordapp.com/api/webhooks' in notification_settings['webhook_url']
+	isDiscord = 'discord.com/api/webhooks' in notification_settings['webhook_url']
 
 	if notification_settings['print_leaderboard']:
 		for player in players:
@@ -155,7 +155,7 @@ def sendPlayerTurn(db, playerData, turnData, notification_settings, lastPlayer =
 			'link_names': 1
 		}
 
-	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+	elif 'discord.com/api/webhooks' in notification_settings['webhook_url']:
 		post = {
 			'username': notification_settings['webhook_name'],
 			'avatar_url': notification_settings['webhook_image'],
@@ -212,7 +212,7 @@ def sendTurnWarning(db, turnData, notification_settings):
 			}],
 			'link_names': 1
 		}
-	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+	elif 'discord.com/api/webhooks' in notification_settings['webhook_url']:
 		post = {
 			'username': notification_settings['webhook_name'],
 			'avatar_url': notification_settings['webhook_image'],
@@ -269,7 +269,7 @@ def sendPlayerWarning(db, turnData, notification_settings):
 			}],
 			'link_names': 1
 		}
-	elif 'discordapp.com/api/webhooks' in notification_settings['webhook_url']:
+	elif 'discord.com/api/webhooks' in notification_settings['webhook_url']:
 		post = {
 			'username': notification_settings['webhook_name'],
 			'avatar_url': notification_settings['webhook_image'],
