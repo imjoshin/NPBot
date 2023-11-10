@@ -100,26 +100,44 @@ def sendTurn(db, turnData, notification_settings, gameOver):
 	textFormat = notification_settings['print_turn_start_format'] if not gameOver else notification_settings['print_game_over_format']
 	text = replaceArray(textFormat, variables)
 
+	posts = []
 	if isSlack:
-		post = {
+		posts.append({
 			'username': notification_settings['webhook_name'],
 			'channel': notification_settings['webhook_channel'],
 			'icon_url': notification_settings['webhook_image'],
 			'attachments': attachments,
 			'link_names': 1,
 			'text': text
-		}
+		})
 
 	elif isDiscord:
-		post = {
-			'username': notification_settings['webhook_name'],
-			'avatar_url': notification_settings['webhook_image'],
-			'content': text,
-			'embeds': attachments
-		}
+		if len(attachments) > 10:
+			groupSize = 8
+			attachmentGroups = zip(*(iter(attachments),) * groupSize)
 
-	command = constants.WEBHOOK_CURL % (json.dumps(post), notification_settings['webhook_url'])
-	process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			first = True
+			for group in attachmentGroups:
+				posts.append({
+					'username': notification_settings['webhook_name'],
+					'avatar_url': notification_settings['webhook_image'],
+					'content': text if first else '',
+					'embeds': group
+				})
+				first = False
+		else:
+			posts.append({
+				'username': notification_settings['webhook_name'],
+				'avatar_url': notification_settings['webhook_image'],
+				'content': text,
+				'embeds': attachments
+			})
+
+	for post in posts:
+		command = constants.WEBHOOK_CURL % (json.dumps(post), notification_settings['webhook_url'])
+		process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		if (len(posts)):
+			time.sleep(5)
 
 def sendPlayerTurn(db, playerData, turnData, notification_settings, lastPlayer = False):
 	log("Posting %s's turn %d. (%s, %s)" % (playerData['name'], turnData['turn_num'] - (1 if lastPlayer else 0), turnData['name'], notification_settings['game_id']))
